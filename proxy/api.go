@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"github.com/decred/dcrd/blockchain"
 	"encoding/json"
 	"net/http"
 	"sync/atomic"
@@ -34,11 +35,11 @@ func (s *ProxyServer) StatsIndex(w http.ResponseWriter, r *http.Request) {
 	}
 	stats["upstreams"] = upstreams
 	stats["current"] = convertUpstream(s.rpc())
-	stats["url"] = "http://" + s.config.Proxy.Listen + "/miner/<diff>/<id>"
+	stats["url"] = "http://" + s.config.Proxy.Listen + " -u minername -p x"
 
 	t := s.currentBlockTemplate()
 	stats["height"] = t.Height
-	stats["diff"] = t.Difficulty
+	stats["diff"] = util.GetDifficultyRatio(blockchain.BigToCompact(t.Difficulty))
 	stats["luck"] = s.getLuckStats()
 	stats["now"] = util.MakeTimestamp()
 	json.NewEncoder(w).Encode(stats)

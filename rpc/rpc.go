@@ -2,10 +2,13 @@ package rpc
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"sync"
 	"sync/atomic"
@@ -16,6 +19,8 @@ type RPCClient struct {
 	sync.RWMutex
 	Url              *url.URL
 	Name             string
+	Username         string
+	Password         string
 	Pool             bool
 	sick             bool
 	sickRate         int
@@ -25,6 +30,16 @@ type RPCClient struct {
 	LastSubmissionAt int64
 	client           *http.Client
 	FailsCount       uint64
+	Req              uint64
+}
+
+const (
+	dumpprotocol = true
+)
+
+type GetWorkReply struct {
+	Data     string `json:"data"`
+	Target   string `json:"target"`
 }
 
 type GetBlockReply struct {
@@ -38,24 +53,28 @@ type JSONRpcResp struct {
 	Error  map[string]interface{} `json:"error"`
 }
 
-func NewRPCClient(name, rawUrl, timeout string, pool bool) (*RPCClient, error) {
+func NewRPCClient(name, rawUrl, username string, password string, timeout string, pool bool) (*RPCClient, error) {
 	url, err := url.Parse(rawUrl)
 	if err != nil {
 		return nil, err
 	}
-	rpcClient := &RPCClient{Name: name, Url: url, Pool: pool}
+	rpcClient := &RPCClient{Name: name, Url: url, Pool: pool, Username:username, Password:password}
 	timeoutIntv, _ := time.ParseDuration(timeout)
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify : true},
+	}
 	rpcClient.client = &http.Client{
+		Transport: tr,
 		Timeout: timeoutIntv,
 	}
 	return rpcClient, nil
 }
 
-func (r *RPCClient) GetWork() ([]string, error) {
+func (r *RPCClient) GetWork() (GetWorkReply, error) {
 	params := []string{}
 
-	rpcResp, err := r.doPost(r.Url.String(), "eth_getWork", params)
-	var reply []string
+	rpcResp, err := r.doPost(r.Url.String(), "getwork", params)
+	var reply GetWorkReply
 	if err != nil {
 		return reply, err
 	}
@@ -64,30 +83,16 @@ func (r *RPCClient) GetWork() ([]string, error) {
 	}
 
 	err = json.Unmarshal(*rpcResp.Result, &reply)
+	//fmt.Printf("R: %T %+v\n", reply, reply)
 	// Handle empty result, daemon is catching up (geth bug!!!)
-	if len(reply) != 3 || len(reply[0]) == 0 {
+	if err != nil {
 		return reply, errors.New("Daemon is not ready")
 	}
 	return reply, err
 }
 
-func (r *RPCClient) GetPendingBlock() (GetBlockReply, error) {
-	params := []interface{}{"pending", false}
-
-	rpcResp, err := r.doPost(r.Url.String(), "eth_getBlockByNumber", params)
-	var reply GetBlockReply
-	if err != nil {
-		return reply, err
-	}
-	if rpcResp.Error != nil {
-		return reply, errors.New(rpcResp.Error["message"].(string))
-	}
-	err = json.Unmarshal(*rpcResp.Result, &reply)
-	return reply, err
-}
-
 func (r *RPCClient) SubmitBlock(params []string) (bool, error) {
-	rpcResp, err := r.doPost(r.Url.String(), "eth_submitWork", params)
+	rpcResp, err := r.doPost(r.Url.String(), "getwork", params)
 	var result bool
 	if err != nil {
 		return false, err
@@ -102,31 +107,29 @@ func (r *RPCClient) SubmitBlock(params []string) (bool, error) {
 	return result, nil
 }
 
-func (r *RPCClient) SubmitHashrate(params interface{}) (bool, error) {
-	rpcResp, err := r.doPost(r.Url.String(), "eth_submitHashrate", params)
-	var result bool
-	if err != nil {
-		return false, err
-	}
-	if rpcResp.Error != nil {
-		return false, errors.New(rpcResp.Error["message"].(string))
-	}
-	err = json.Unmarshal(*rpcResp.Result, &result)
-	if !result {
-		return false, errors.New("Request failure")
-	}
-	return result, nil
-}
-
 func (r *RPCClient) doPost(url, method string, params interface{}) (JSONRpcResp, error) {
-	jsonReq := map[string]interface{}{"jsonrpc": "2.0", "id": 0, "method": method, "params": params}
+	r.Req++
+	reqcount := r.Req
+	jsonReq := map[string]interface{}{"id": 0, "method": method, "params": params}
 	data, _ := json.Marshal(jsonReq)
+	if dumpprotocol {
+		fmt.Printf("Send(%d): %s\n", reqcount, data)
+	}
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
+	req.SetBasicAuth(r.Username, r.Password)
 	req.Header.Set("Content-Length", (string)(len(data)))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
+	if dumpprotocol {
+		dump, err2 := httputil.DumpRequestOut(req, true)
+		fmt.Printf("REQ: %+v %+v\n", string(dump), err2)
+	}
 	resp, err := r.client.Do(req)
+	if dumpprotocol {
+		dump, err2 := httputil.DumpResponse(resp, true)
+		fmt.Printf("RES: %+v %+v\n", string(dump), err2)
+	}
 	var rpcResp JSONRpcResp
 
 	if err != nil {
@@ -137,6 +140,9 @@ func (r *RPCClient) doPost(url, method string, params interface{}) (JSONRpcResp,
 	defer resp.Body.Close()
 
 	body, _ := ioutil.ReadAll(resp.Body)
+	if dumpprotocol {
+		fmt.Printf("Recv(%d): %s\n", reqcount, body)
+	}
 	err = json.Unmarshal(body, &rpcResp)
 
 	if rpcResp.Error != nil {

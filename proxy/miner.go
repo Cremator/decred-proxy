@@ -5,16 +5,10 @@ import (
 	"log"
 	"math/big"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/ethereum/ethash"
-	"github.com/ethereum/go-ethereum/common"
 )
-
-var hasher = ethash.New()
 
 type Miner struct {
 	sync.RWMutex
@@ -75,46 +69,35 @@ func (m *Miner) hashrate(hashrateWindow time.Duration) int64 {
 func (m *Miner) processShare(s *ProxyServer, t *BlockTemplate, diff string, params []string) bool {
 	paramsOrig := params[:]
 
-	hashNoNonce := params[1]
-	nonce, err := strconv.ParseUint(strings.Replace(params[0], "0x", "", -1), 16, 64)
-	if err != nil {
-		log.Printf("Malformed nonce: %v", err)
-		return false
-	}
-	mixDigest := params[2]
-
 	rpc := s.rpc()
 	var shareDiff *big.Int
 
-	if !rpc.Pool {
+	if !rpc.Pool && diff != "" {
 		minerDifficulty, err := strconv.ParseFloat(diff, 64)
 		if err != nil {
 			log.Println("Malformed difficulty: " + diff)
-			minerDifficulty = 5
+			minerDifficulty = 8
 		}
-		diff1 := int64(minerDifficulty * 1000000 * 100)
-		shareDiff = big.NewInt(diff1)
+		if (minerDifficulty <= 0) {
+			log.Println("Invalid difficulty: " + diff)
+			minerDifficulty = 8
+		}
+		shareDiff = big.NewInt(int64(minerDifficulty))
 	} else {
-		shareDiff = util.TargetHexToDiff(t.Target)
+		shareDiff = util.TargetStrToDiff(t.Target)
 	}
 
 	share := Block{
-		number:      t.Height,
-		hashNoNonce: common.HexToHash(hashNoNonce),
-		difficulty:  shareDiff,
-		nonce:       nonce,
-		mixDigest:   common.HexToHash(mixDigest),
+		header:      params[0],
+		difficulty:  new(big.Int).Div(util.PowLimit, shareDiff),
 	}
 
 	block := Block{
-		number:      t.Height,
-		hashNoNonce: common.HexToHash(hashNoNonce),
+		header:      params[0],
 		difficulty:  t.Difficulty,
-		nonce:       nonce,
-		mixDigest:   common.HexToHash(mixDigest),
 	}
 
-	if hasher.Verify(share) {
+	if share.Verify() {
 		m.heartbeat()
 		m.storeShare(shareDiff.Int64())
 		atomic.AddUint64(&m.validShares, 1)
@@ -129,8 +112,8 @@ func (m *Miner) processShare(s *ProxyServer, t *BlockTemplate, diff string, para
 		return false
 	}
 
-	if rpc.Pool || hasher.Verify(block) {
-		_, err = rpc.SubmitBlock(paramsOrig)
+	if rpc.Pool || block.Verify() {
+		_, err := rpc.SubmitBlock(paramsOrig)
 		now := util.MakeTimestamp()
 		if err != nil {
 			atomic.AddUint64(&m.rejects, 1)

@@ -21,24 +21,28 @@
 	"upstream": [
 		{
 			"pool": true,
-			"name": "EuroHash.net",
-			"url": "http://eth-eu.eurohash.net:8888/miner/0xb85150eb365e7df0941f0cf08235f987ba91506a/proxy",
+			"name": "Suprnova",
+			"url": "http://dcr.suprnova.cc:9110",
 			"timeout": "10s"
 		},
 		{
 			"name": "main",
-			"url": "http://127.0.0.1:8545",
+			"url": "http://127.0.0.1:9109",
+			"username": "yourusername",
+			"password": "yoursecurepassword",
 			"timeout": "10s"
 		},
 		{
 			"name": "backup",
-			"url": "http://127.0.0.2:8545",
+			"url": "http://127.0.0.2:9109",
+			"username": "yourusername",
+			"password": "yoursecurepassword",
 			"timeout": "10s"
 		}
 	],
 
 	"newrelicEnabled": false,
-	"newrelicName": "MyEtherProxy",
+	"newrelicName": "MyDecredProxy",
 	"newrelicKey": "SECRET_KEY",
 	"newrelicVerbose": false
 }

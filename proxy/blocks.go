@@ -1,35 +1,38 @@
 package proxy
 
 import (
+	"encoding/binary"
+	"encoding/hex"
 	"log"
 	"math/big"
-	"strconv"
-	"strings"
 
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/decred/dcrd/blockchain"
+	"github.com/decred/dcrd/chaincfg/chainhash"
 )
 
 type BlockTemplate struct {
 	Header     string
-	Seed       string
 	Target     string
 	Difficulty *big.Int
 	Height     uint64
 }
 
 type Block struct {
-	difficulty  *big.Int
-	hashNoNonce common.Hash
-	nonce       uint64
-	mixDigest   common.Hash
-	number      uint64
+	difficulty *big.Int
+	header     string
 }
 
 func (b Block) Difficulty() *big.Int     { return b.difficulty }
-func (b Block) HashNoNonce() common.Hash { return b.hashNoNonce }
-func (b Block) Nonce() uint64            { return b.nonce }
-func (b Block) MixDigest() common.Hash   { return b.mixDigest }
-func (b Block) NumberU64() uint64        { return b.number }
+
+func (b Block) Verify() bool {
+	databytes, err := hex.DecodeString(b.header[0:360])
+	if err != nil {
+		return false
+	}
+	hash := chainhash.HashFuncH(databytes)
+	hashNum := blockchain.ShaHashToBig(&hash)
+	return hashNum.Cmp(b.difficulty) <= 0
+}
 
 func (s *ProxyServer) fetchBlockTemplate() {
 	rpc := s.rpc()
@@ -41,15 +44,14 @@ func (s *ProxyServer) fetchBlockTemplate() {
 
 	t := s.currentBlockTemplate()
 
-	height, diff, err := s.fetchPendingBlock()
+	height, diff, err := s.fetchPendingBlock(reply.Data)
 	if err != nil {
 		log.Printf("Error while refreshing pending block on %s: %s", rpc.Name, err)
 		return
 	}
 	newTemplate := BlockTemplate{
-		Header:     reply[0],
-		Seed:       reply[1],
-		Target:     reply[2],
+		Header:     reply.Data,
+		Target:     reply.Target,
 		Height:     height,
 		Difficulty: diff,
 	}
@@ -61,23 +63,19 @@ func (s *ProxyServer) fetchBlockTemplate() {
 	return
 }
 
-func (s *ProxyServer) fetchPendingBlock() (uint64, *big.Int, error) {
-	rpc := s.rpc()
-	reply, err := rpc.GetPendingBlock()
-	if err != nil {
-		log.Printf("Error while refreshing pending block on %s: %s", rpc.Name, err)
-		return 0, nil, err
-	}
-	blockNumber, err := strconv.ParseUint(strings.Replace(reply.Number, "0x", "", -1), 16, 64)
+func (s *ProxyServer) fetchPendingBlock(data string) (uint64, *big.Int, error) {
+	blockNumberStr, err := hex.DecodeString(data[256:264])
 	if err != nil {
 		log.Println("Can't parse pending block number")
+		// TODO: valami alap difficultyt!!
 		return 0, nil, err
 	}
-	blockDiff, err := strconv.ParseInt(strings.Replace(reply.Difficulty, "0x", "", -1), 16, 64)
+	blockNumber := binary.LittleEndian.Uint32(blockNumberStr)
+	blockDiffStr, err := hex.DecodeString(data[232:240])
 	if err != nil {
 		log.Println("Can't parse pending block difficulty")
 		return 0, nil, err
 	}
-
-	return blockNumber, big.NewInt(blockDiff), nil
+	blockDiff := binary.LittleEndian.Uint32(blockDiffStr)
+	return uint64(blockNumber),  blockchain.CompactToBig(blockDiff), nil
 }

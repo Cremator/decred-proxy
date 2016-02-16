@@ -6,12 +6,12 @@ type Config struct {
 	Upstream              []Upstream `json:"upstream"`
 	UpstreamCheckInterval string     `json:"upstreamCheckInterval"`
 
-	Threads int `json:"threads"`
+	Threads               int `json:"threads"`
 
-	NewrelicName    string `json:"newrelicName"`
-	NewrelicKey     string `json:"newrelicKey"`
-	NewrelicVerbose bool   `json:"newrelicVerbose"`
-	NewrelicEnabled bool   `json:"newrelicEnabled"`
+	NewrelicName          string `json:"newrelicName"`
+	NewrelicKey           string `json:"newrelicKey"`
+	NewrelicVerbose       bool   `json:"newrelicVerbose"`
+	NewrelicEnabled       bool   `json:"newrelicEnabled"`
 }
 
 type Proxy struct {
@@ -19,7 +19,6 @@ type Proxy struct {
 	ClientTimeout        string `json:"clientTimeout"`
 	BlockRefreshInterval string `json:"blockRefreshInterval"`
 	HashrateWindow       string `json:"hashrateWindow"`
-	SubmitHashrate       bool   `json:"submitHashrate"`
 	LuckWindow           string `json:"luckWindow"`
 	LargeLuckWindow      string `json:"largeLuckWindow"`
 }
@@ -31,8 +30,10 @@ type Frontend struct {
 }
 
 type Upstream struct {
-	Name    string `json:"name"`
-	Url     string `json:"url"`
-	Timeout string `json:"timeout"`
-	Pool    bool   `json:"pool"`
+	Name     string `json:"name"`
+	Url      string `json:"url"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Timeout  string `json:"timeout"`
+	Pool     bool   `json:"pool"`
 }

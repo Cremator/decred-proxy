@@ -10,14 +10,12 @@ type JSONRpcReq struct {
 
 type JSONRpcResp struct {
 	Id      *json.RawMessage `json:"id"`
-	Version string           `json:"jsonrpc"`
 	Result  interface{}      `json:"result"`
 	Error   interface{}      `json:"error,omitempty"`
 }
 
 type JobReplyData struct {
-	Blob   string `json:"blob"`
-	JobId  string `json:"job_id"`
+	Data   string `json:"data"`
 	Target string `json:"target"`
 }
 

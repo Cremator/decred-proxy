@@ -32,7 +32,7 @@ func startProxy() {
 
 	go startFrontend(&cfg, s)
 
-	r.Handle("/miner/{diff:.+}/{id:.+}", s)
+	r.Handle("/", s)
 	err := http.ListenAndServe(cfg.Proxy.Listen, r)
 	if err != nil {
 		log.Fatal(err)

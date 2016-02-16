@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"encoding/json"
 	"errors"
-	"github.com/gorilla/mux"
 	"io"
 	"log"
 	"net"
@@ -45,7 +44,7 @@ func NewEndpoint(cfg *Config) *ProxyServer {
 
 	proxy.upstreams = make([]*rpc.RPCClient, len(cfg.Upstream))
 	for i, v := range cfg.Upstream {
-		client, err := rpc.NewRPCClient(v.Name, v.Url, v.Timeout, v.Pool)
+		client, err := rpc.NewRPCClient(v.Name, v.Url, v.Username, v.Password, v.Timeout, v.Pool)
 		if err != nil {
 			log.Fatal(err)
 		} else {
@@ -129,7 +128,7 @@ func (s *ProxyServer) checkUpstreams() {
 
 func (s *ProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
-		s.writeError(w, 405, "rpc: POST method required, received "+r.Method)
+		s.writeError(w, 405, "rpc: POST method required, received " + r.Method)
 		return
 	}
 	s.handleClient(w, r)
@@ -170,36 +169,32 @@ func (cs *Session) handleMessage(s *ProxyServer, r *http.Request, req *JSONRpcRe
 		return
 	}
 
-	vars := mux.Vars(r)
+	username, password, _ := r.BasicAuth()
 
 	// Handle RPC methods
 	switch req.Method {
-	case "eth_getWork":
-		reply, errReply := s.handleGetWorkRPC(cs, vars["diff"], vars["id"])
-		if errReply != nil {
-			cs.sendError(req.Id, errReply)
-			break
-		}
-		cs.sendResult(req.Id, &reply)
-	case "eth_submitWork":
+	case "getwork":
 		var params []string
 		err := json.Unmarshal(*req.Params, &params)
 		if err != nil {
 			log.Println("Unable to parse params")
 			break
 		}
-		reply, errReply := s.handleSubmitRPC(cs, vars["diff"], vars["id"], params)
-		if errReply != nil {
-			err = cs.sendError(req.Id, errReply)
-			break
+		if (len(params) == 0) {
+			reply, errReply := s.handleGetWorkRPC(cs, password, username)
+			if errReply != nil {
+				cs.sendError(req.Id, errReply)
+				break
+			}
+			cs.sendResult(req.Id, &reply)
+		} else {
+			reply, errReply := s.handleSubmitRPC(cs, password, username, params)
+			if errReply != nil {
+				err = cs.sendError(req.Id, errReply)
+				break
+			}
+			cs.sendResult(req.Id, &reply)
 		}
-		cs.sendResult(req.Id, &reply)
-	case "eth_submitHashrate":
-		reply := true
-		if s.config.Proxy.SubmitHashrate {
-			reply = s.handleSubmitHashrate(cs, req)
-		}
-		cs.sendResult(req.Id, reply)
 	default:
 		errReply := s.handleUnknownRPC(cs, req)
 		cs.sendError(req.Id, errReply)
@@ -207,12 +202,12 @@ func (cs *Session) handleMessage(s *ProxyServer, r *http.Request, req *JSONRpcRe
 }
 
 func (cs *Session) sendResult(id *json.RawMessage, result interface{}) error {
-	message := JSONRpcResp{Id: id, Version: "2.0", Error: nil, Result: result}
+	message := JSONRpcResp{Id: id, Error: nil, Result: result}
 	return cs.enc.Encode(&message)
 }
 
 func (cs *Session) sendError(id *json.RawMessage, reply *ErrorReply) error {
-	message := JSONRpcResp{Id: id, Version: "2.0", Error: reply}
+	message := JSONRpcResp{Id: id, Error: reply}
 	return cs.enc.Encode(&message)
 }
 
