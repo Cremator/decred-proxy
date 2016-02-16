@@ -84,8 +84,8 @@ In this example we specified [Suprnova's Decred Pool](https://dcr.suprnova.cc/) 
 
 #### Mining
 
-    ethminer -F http://x.x.x.x:8546/miner/5/gpu-rig -G
-    ethminer -F http://x.x.x.x:8546/miner/0.1/cpu-rig -C
+    cgminer --blake256 -o http://x.x.x.x:9109 -u amd -p 4 --other-parameters....
+    ccminer -a decred -o https://x.x.x.x:9109 -u nvidia -p 4 --other-parameters....
 
 ### Pools that work with this proxy
 
