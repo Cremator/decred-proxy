@@ -23,6 +23,8 @@
 			"pool": true,
 			"name": "Suprnova",
 			"url": "http://dcr.suprnova.cc:9110",
+			"username": "workerlogin",
+			"password": "workerpassword",
 			"timeout": "10s"
 		},
 		{
