@@ -103,7 +103,7 @@ func TargetStrToDiff(targetHex string) *big.Int {
 	if err != nil {
 		return big.NewInt(0)
 	}
-	targetdiff := blockchain.ShaHashToBig(hash)
+	targetdiff := blockchain.HashToBig(hash)
 	if targetdiff.Cmp( big.NewInt(0)) != 0 {
 		targetdiff.Div(PowLimit, targetdiff)
 	}

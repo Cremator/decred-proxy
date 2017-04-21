@@ -29,8 +29,8 @@ func (b Block) Verify() bool {
 	if err != nil {
 		return false
 	}
-	hash := chainhash.HashFuncH(databytes)
-	hashNum := blockchain.ShaHashToBig(&hash)
+	hash := chainhash.HashH(databytes)
+	hashNum := blockchain.HashToBig(&hash)
 	return hashNum.Cmp(b.difficulty) <= 0
 }
 
